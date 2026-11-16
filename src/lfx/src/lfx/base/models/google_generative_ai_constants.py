@@ -3,13 +3,27 @@ from .model_metadata import create_model_metadata
 # Unified model metadata - single source of truth
 
 GOOGLE_GENERATIVE_AI_MODELS_DETAILED = [
-    # GEMINI 2.5 (stable - recommended)
+    # Gemini 2.5 replacement models recommended by Google.
+    create_model_metadata(
+        provider="Google Generative AI",
+        name="gemini-3.5-flash-lite",
+        icon="GoogleGenerativeAI",
+        tool_calling=True,
+        default=True,
+    ),
+    create_model_metadata(
+        provider="Google Generative AI",
+        name="gemini-3.8-flash",
+        icon="GoogleGenerativeAI",
+        tool_calling=True,
+    ),
+    # Keep retired model IDs available for existing saved configurations.
     create_model_metadata(
         provider="Google Generative AI",
         name="gemini-2.5-flash",
         icon="GoogleGenerativeAI",
         tool_calling=True,
-        default=True,
+        deprecated=True,
     ),
     create_model_metadata(
         provider="Google Generative AI",

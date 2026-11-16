@@ -39,7 +39,18 @@ def _install_function_response_name_compat() -> type[ChatGoogleGenerativeAI]:
         self: ChatGoogleGenerativeAI, messages: list[Any], *args: Any, **kwargs: Any
     ) -> dict[str, Any]:
         fixed_messages = _ensure_function_response_names(messages)
-        return original_prepare_request(self, fixed_messages, *args, **kwargs)
+        request = original_prepare_request(self, fixed_messages, *args, **kwargs)
+        if self.model.removeprefix("models/") in {"gemini-3.5-flash-lite", "gemini-3.8-flash"}:
+            # The SDK still supplies sampling and candidate defaults removed by
+            # these models: https://aistudio.google.com/docs/whats-new-gemini-3.6
+            config = request["config"]
+            if config.candidate_count not in (None, 1):
+                msg = "This Gemini model supports only one candidate per request."
+                raise ValueError(msg)
+            request["config"] = config.model_copy(
+                update={"temperature": None, "top_p": None, "top_k": None, "candidate_count": None}
+            )
+        return request
 
     setattr(prepare_request_with_function_response_names, "__lfx_function_response_name_compat__", True)  # noqa: B010
     setattr(ChatGoogleGenerativeAI, "_prepare_request", prepare_request_with_function_response_names)  # noqa: B010

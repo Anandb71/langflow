@@ -1,5 +1,6 @@
 """Regression tests for Gemini function-response compatibility in LFX."""
 
+import pytest
 from langchain_core.messages import AIMessage, FunctionMessage, HumanMessage, ToolMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 from lfx.base.models.google_generative_ai_model import (
@@ -77,3 +78,37 @@ def test_compat_install_is_idempotent():
     request_hook = getattr(ChatGoogleGenerativeAI, "_prepare_request")  # noqa: B009
     assert _install_function_response_name_compat() is ChatGoogleGenerativeAI
     assert getattr(ChatGoogleGenerativeAI, "_prepare_request") is request_hook  # noqa: B009
+
+
+@pytest.mark.parametrize("model_name", ["gemini-3.5-flash-lite", "gemini-3.8-flash", "models/gemini-3.8-flash"])
+def test_replacement_models_omit_removed_generation_parameters(model_name):
+    model = ChatGoogleGenerativeAIFixed(
+        model=model_name, google_api_key="test-key", temperature=0.1, top_k=40, top_p=0.9
+    )
+    request = model._prepare_request([HumanMessage(content="hello")])
+    config = request["config"].model_dump(exclude_none=True)
+    assert not {"temperature", "top_k", "top_p", "candidate_count"}.intersection(config)
+    assert request["contents"][-1].role == "user"
+
+
+def test_replacement_model_rejects_multiple_candidates():
+    model = ChatGoogleGenerativeAIFixed(model="gemini-3.5-flash-lite", google_api_key="test-key", n=2)
+    with pytest.raises(ValueError, match="only one candidate"):
+        model._prepare_request([HumanMessage(content="hello")])
+
+
+def test_older_model_retains_sampling_parameters():
+    model = ChatGoogleGenerativeAIFixed(model="gemini-2.5-flash-lite", google_api_key="test-key", temperature=0.1, n=2)
+    config = model._prepare_request([HumanMessage(content="hello")])["config"]
+    assert config.temperature == 0.1
+    assert config.candidate_count == 2
+
+
+def test_google_component_and_catalogue_share_the_replacement_default():
+    from lfx.base.models.google_generative_ai_constants import GOOGLE_GENERATIVE_AI_MODELS_DETAILED
+    from lfx_google.components.google.google_generative_ai import GoogleGenerativeAIComponent
+
+    model_input = next(item for item in GoogleGenerativeAIComponent.inputs if item.name == "model_name")
+    assert model_input.value == "gemini-3.5-flash-lite"
+    defaults = [model["name"] for model in GOOGLE_GENERATIVE_AI_MODELS_DETAILED if model.get("default")]
+    assert defaults == [model_input.value]
